@@ -1,10 +1,27 @@
+# Consolidated spring configuration (avoid duplicate keys)
 spring:
- application:
-   name: gateway-service
- profiles:
-   active: dev
- config:
-   import: "optional:configserver:"   # qué importar
- cloud:
-   config:
-     uri: http://localhost:8888       # dónde está el config server
+  application:
+    name: gateway-service
+  profiles:
+    active: dev
+  config:
+    import: "optional:configserver:"   # qué importar
+  cloud:
+    config:
+      uri: http://localhost:8888       # dónde está el config server
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+          stripPrefix: true
+
+# Actuator exposure for gateway
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    health:
+      show-details: always

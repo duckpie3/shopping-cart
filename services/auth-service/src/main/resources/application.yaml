@@ -4,6 +4,9 @@ spring:
 
   profiles:
     active: dev
+  devtools:
+    restart:
+      enabled: false
    
   config:
     import: "optional:configserver:"   # qué importar
@@ -11,3 +14,13 @@ spring:
   cloud:
     config:
       uri: http://localhost:8888       # dónde está el config server
+
+# Actuator exposure for local dev
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
