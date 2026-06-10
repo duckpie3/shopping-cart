@@ -15,6 +15,20 @@ spring:
           enabled: true
           lower-case-service-id: true
           stripPrefix: true
+      mvc:
+        routes:
+          - id: invoice-service-products
+            uri: lb://invoice-service
+            predicates:
+              - Path=/product/**
+          - id: invoice-service-cart
+            uri: lb://invoice-service
+            predicates:
+              - Path=/cart-item/**
+          - id: invoice-service-invoices
+            uri: lb://invoice-service
+            predicates:
+              - Path=/invoice/**
 
 # Actuator exposure for gateway
 management:

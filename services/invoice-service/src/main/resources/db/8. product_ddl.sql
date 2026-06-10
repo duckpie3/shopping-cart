@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS product;
+
+CREATE TABLE product(
+	gtin CHAR(13) NOT NULL,
+	name VARCHAR(255) NOT NULL,
+	price DECIMAL(12,2) NOT NULL,
+	stock INT NOT NULL,
+	status BOOLEAN NOT NULL,
+	PRIMARY KEY (gtin)
+);

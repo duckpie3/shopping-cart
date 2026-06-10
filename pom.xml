@@ -24,6 +24,7 @@
         <module>services/auth-service</module>
         <module>services/config-server</module>
         <module>services/gateway-service</module>
+        <module>services/invoice-service</module>
         <module>services/registry-service</module>
     </modules>
     
