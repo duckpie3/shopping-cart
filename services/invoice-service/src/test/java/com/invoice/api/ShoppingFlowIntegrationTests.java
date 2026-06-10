@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -45,21 +44,17 @@ class ShoppingFlowIntegrationTests {
 	static final String SECRET = "8J+YjvCfpJPwn5ic8J+YmvCfmI3wn6Ww8J+ZgvCfpKM=";
 	private static final SecretKey KEY = new SecretKeySpec(Base64.getDecoder().decode(SECRET), "HmacSHA256");
 
-	private static final String CUSTOMER_ID = "10";
+	private static final Integer CUSTOMER_ID = 10;
 	private static final String ADMIN_TOKEN = bearer("admin", 1, "ADMIN");
-	private static final String CUSTOMER_TOKEN = bearer("customer", Integer.parseInt(CUSTOMER_ID), "CUSTOMER");
+	private static final String CUSTOMER_TOKEN = bearer("customer", CUSTOMER_ID, "CUSTOMER");
 
-	private static String bearer(String username, int userId, String... authorities) {
-		List<Map<String, String>> roles = Arrays.stream(authorities)
-				.map(authority -> Map.of("authority", authority))
-				.toList();
-		String token = Jwts.builder()
+	private static String bearer(String username, int userId, String authority) {
+		return "Bearer " + Jwts.builder()
 				.setSubject(username)
 				.claim("id", userId)
-				.claim("roles", roles)
+				.claim("roles", List.of(Map.of("authority", authority)))
 				.signWith(KEY)
 				.compact();
-		return "Bearer " + token;
 	}
 
 	@Autowired
@@ -115,7 +110,7 @@ class ShoppingFlowIntegrationTests {
 	}
 
 	@Test
-	void cartLifecycleUsesCustomerToken() throws Exception {
+	void cartLifecycle() throws Exception {
 		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 100);
 
 		mockMvc.perform(post("/cart-item")
@@ -132,11 +127,15 @@ class ShoppingFlowIntegrationTests {
 				.andExpect(jsonPath("$.quantity", is(2)))
 				.andExpect(jsonPath("$.total", is(42.0)));
 
-		Integer cartItemId = repoCartItem.findAllByUserIdAndStatusTrue(Integer.valueOf(CUSTOMER_ID)).get(0).getCart_item_id();
+		// Agregar el mismo producto suma cantidades en lugar de crear otro registro
+		addCartItem("7501055300075", 3);
 
 		mockMvc.perform(get("/cart-item").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$", hasSize(1)));
+				.andExpect(jsonPath("$", hasSize(1)))
+				.andExpect(jsonPath("$[0].quantity", is(5)));
+
+		Integer cartItemId = repoCartItem.findAllByUserIdAndStatusTrue(CUSTOMER_ID).get(0).getCart_item_id();
 
 		mockMvc.perform(delete("/cart-item/{id}", cartItemId).header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
@@ -145,6 +144,23 @@ class ShoppingFlowIntegrationTests {
 		mockMvc.perform(get("/cart-item").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(0)));
+	}
+
+	@Test
+	void cartRejectsInsufficientStock() throws Exception {
+		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 1);
+
+		mockMvc.perform(post("/cart-item")
+				.header("Authorization", CUSTOMER_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{
+						  "gtin": "7501055300075",
+						  "quantity": 2
+						}
+						"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message", is("Stock insuficiente para el producto Coca-cola 600 ml")));
 	}
 
 	@Test
@@ -157,28 +173,36 @@ class ShoppingFlowIntegrationTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message", is("La factura ha sido registrada")));
 
+		// Ejemplo de la especificación: total 42.00, impuestos 6.72, subtotal 35.28
 		Invoice invoice = repoInvoice.findAll().get(0);
-		BigDecimal expectedTotal = new BigDecimal("42.00");
-		BigDecimal expectedTaxes = new BigDecimal("6.72");
-		BigDecimal expectedSubtotal = new BigDecimal("35.28");
-
-		org.assertj.core.api.Assertions.assertThat(invoice.getTotal()).isEqualByComparingTo(expectedTotal);
-		org.assertj.core.api.Assertions.assertThat(invoice.getTaxes()).isEqualByComparingTo(expectedTaxes);
-		org.assertj.core.api.Assertions.assertThat(invoice.getSubtotal()).isEqualByComparingTo(expectedSubtotal);
+		org.assertj.core.api.Assertions.assertThat(invoice.getTotal()).isEqualByComparingTo(new BigDecimal("42.00"));
+		org.assertj.core.api.Assertions.assertThat(invoice.getTaxes()).isEqualByComparingTo(new BigDecimal("6.72"));
+		org.assertj.core.api.Assertions.assertThat(invoice.getSubtotal()).isEqualByComparingTo(new BigDecimal("35.28"));
 		org.assertj.core.api.Assertions.assertThat(invoice.getItems()).hasSize(1);
 		org.assertj.core.api.Assertions.assertThat(repoProduct.findById("7501055300075").get().getStock()).isEqualTo(98);
-		org.assertj.core.api.Assertions.assertThat(repoCartItem.findAllByUserIdAndStatusTrue(Integer.valueOf(CUSTOMER_ID))).isEmpty();
+		org.assertj.core.api.Assertions.assertThat(repoCartItem.findAllByUserIdAndStatusTrue(CUSTOMER_ID)).isEmpty();
 	}
 
 	@Test
 	void checkoutRejectsInsufficientStock() throws Exception {
-		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 1);
+		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 5);
 
-		addCartItem("7501055300075", 2);
+		addCartItem("7501055300075", 5);
+		// El stock baja a 2 después de agregar al carrito; el checkout debe detectarlo
+		repoProduct.findById("7501055300075").ifPresent(product -> {
+			product.setStock(2);
+			repoProduct.save(product);
+		});
 
 		mockMvc.perform(post("/invoice").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message", is("Stock insuficiente para el producto Coca-cola 600 ml")));
+	}
+
+	@Test
+	void requestsWithoutTokenAreRejected() throws Exception {
+		mockMvc.perform(get("/cart-item"))
+				.andExpect(status().isUnauthorized());
 	}
 
 	private void createProduct(String gtin, String name, String price, int stock) throws Exception {

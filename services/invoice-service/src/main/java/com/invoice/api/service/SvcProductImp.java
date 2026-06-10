@@ -2,7 +2,6 @@ package com.invoice.api.service;
 
 import java.util.List;
 
-import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -11,7 +10,6 @@ import com.invoice.api.dto.product.ProductRequest;
 import com.invoice.api.entity.Product;
 import com.invoice.api.repository.RepoProduct;
 import com.invoice.exception.ApiException;
-import com.invoice.exception.DBAccessException;
 
 @Service
 public class SvcProductImp implements SvcProduct {
@@ -24,58 +22,38 @@ public class SvcProductImp implements SvcProduct {
 
 	@Override
 	public Product create(ProductRequest request) {
-		try {
-			if (repoProduct.existsById(request.getGtin())) {
-				throw new ApiException(HttpStatus.CONFLICT, "El producto ya existe");
-			}
-			Product product = new Product(request.getGtin(), request.getName(), request.getPrice(), request.getStock(), true);
-			return repoProduct.save(product);
-		} catch (DataAccessException exception) {
-			throw new DBAccessException(exception);
+		if (repoProduct.existsById(request.getGtin())) {
+			throw new ApiException(HttpStatus.CONFLICT, "El producto ya existe");
 		}
+		Product product = new Product(request.getGtin(), request.getName(), request.getPrice(), request.getStock(), true);
+		return repoProduct.save(product);
 	}
 
 	@Override
 	public List<Product> findAll() {
-		try {
-			return repoProduct.findAllByStatusTrue();
-		} catch (DataAccessException exception) {
-			throw new DBAccessException(exception);
-		}
+		return repoProduct.findAllByStatusTrue();
 	}
 
 	@Override
 	public Product findByGtin(String gtin) {
-		try {
-			return findActiveProduct(gtin);
-		} catch (DataAccessException exception) {
-			throw new DBAccessException(exception);
-		}
+		return findActiveProduct(gtin);
 	}
 
 	@Override
 	public Product update(String gtin, ProductRequest request) {
-		try {
-			Product product = findActiveProduct(gtin);
-			product.setName(request.getName());
-			product.setPrice(request.getPrice());
-			product.setStock(request.getStock());
-			return repoProduct.save(product);
-		} catch (DataAccessException exception) {
-			throw new DBAccessException(exception);
-		}
+		Product product = findActiveProduct(gtin);
+		product.setName(request.getName());
+		product.setPrice(request.getPrice());
+		product.setStock(request.getStock());
+		return repoProduct.save(product);
 	}
 
 	@Override
 	public ApiResponse delete(String gtin) {
-		try {
-			Product product = findActiveProduct(gtin);
-			product.setStatus(false);
-			repoProduct.save(product);
-			return new ApiResponse("El producto ha sido eliminado");
-		} catch (DataAccessException exception) {
-			throw new DBAccessException(exception);
-		}
+		Product product = findActiveProduct(gtin);
+		product.setStatus(false);
+		repoProduct.save(product);
+		return new ApiResponse("El producto ha sido eliminado");
 	}
 
 	private Product findActiveProduct(String gtin) {
