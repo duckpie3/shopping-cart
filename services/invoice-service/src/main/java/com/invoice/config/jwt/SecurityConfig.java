@@ -24,14 +24,13 @@ public class SecurityConfig {
 		http.csrf(AbstractHttpConfigurer::disable)
 		.authorizeHttpRequests(
 				auth -> auth
-				.requestMatchers("/error", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/info", "/actuator/health", "/h2-console/**").permitAll()
+				.requestMatchers("/error", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/info", "/actuator/health").permitAll()
 				.requestMatchers(HttpMethod.GET, "/product/**").authenticated()
 				.requestMatchers("/product/**").hasAuthority("ADMIN")
 				.requestMatchers("/cart-item/**").authenticated()
 				.requestMatchers("/invoice/**").authenticated()
 				.anyRequest().authenticated()
 				)
-		.headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
 		.cors(cors -> cors.configurationSource(corsConfig))
 		.exceptionHandling(handling -> handling.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
 		.formLogin(form -> form.disable())

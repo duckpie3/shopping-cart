@@ -17,13 +17,27 @@ Spring Cloud).
 ## Requisitos
 
 - Java 21 (no se necesita Maven instalado; cada servicio incluye el wrapper `mvnw`).
-- La API Invoice usa una base de datos H2 en memoria: **los datos se reinician al
-  reiniciar el servicio**.
+- Un servidor MySQL accesible en `localhost:3306`.
+
+## Base de datos
+
+La API Invoice espera una base de datos `db_invoice` con un usuario
+`invoice` / `invoice123`. Para crearlos:
+
+```sql
+CREATE DATABASE db_invoice;
+CREATE USER 'invoice'@'%' IDENTIFIED BY 'invoice123';
+GRANT ALL PRIVILEGES ON db_invoice.* TO 'invoice'@'%';
+```
+
+Las tablas se crean automáticamente al arrancar el servicio. Si la base, el
+usuario o el host son distintos, se pueden ajustar con las variables de entorno
+`MYSQL_URL`, `MYSQL_USER` y `MYSQL_PASSWORD`.
 
 ## Opción rápida: probar solo la API Invoice
 
-Para probar la funcionalidad del carrito y la facturación basta con levantar
-`invoice-service`:
+Con la base de datos arriba, basta con levantar `invoice-service` para probar
+la funcionalidad del carrito y la facturación:
 
 ```bash
 cd services/invoice-service
@@ -101,8 +115,8 @@ curl -i -X POST http://localhost:8084/cart-item -H "Authorization: Bearer $CUST"
 
 - **Swagger UI**: <http://localhost:8084/swagger-ui.html> — botón *Authorize* y pegar
   el token (sin el prefijo `Bearer`).
-- **Consola H2**: <http://localhost:8084/h2-console> — JDBC URL `jdbc:h2:mem:db_invoice`,
-  usuario `sa`, contraseña vacía.
+- Los datos pueden consultarse con cualquier cliente MySQL
+  (base `db_invoice`, usuario `invoice`).
 
 ### Pruebas automatizadas
 
@@ -114,11 +128,13 @@ sh mvnw test
 Las pruebas de integración cubren el CRUD de productos, el ciclo del carrito,
 la validación de stock y la generación de la factura con el ejemplo de la
 especificación (2 × $21 → total 42.00, impuestos 6.72, subtotal 35.28).
+Las pruebas usan una base en memoria, por lo que no necesitan MySQL ni
+modifican los datos reales.
 
 ## Arquitectura completa (todos los microservicios)
 
-Levantar cada servicio en una terminal distinta, **en este orden**
-(`sh mvnw spring-boot:run` dentro de cada carpeta en `services/`):
+Con la base de datos arriba, levantar cada servicio en una terminal distinta,
+**en este orden** (`sh mvnw spring-boot:run` dentro de cada carpeta en `services/`):
 
 1. `config-server` (8888) — los demás obtienen su configuración de aquí
 2. `registry-service` (8761) — Eureka
