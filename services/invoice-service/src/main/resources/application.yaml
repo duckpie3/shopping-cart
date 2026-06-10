@@ -27,6 +27,9 @@ spring:
 server:
   port: 8084
 
+jwt:
+  secret: ${JWT_SECRET:8J+YjvCfpJPwn5ic8J+YmvCfmI3wn6Ww8J+ZgvCfpKM=}
+
 eureka:
   client:
     service-url:

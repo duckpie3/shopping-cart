@@ -10,6 +10,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,15 +31,36 @@ import com.invoice.api.repository.RepoCartItem;
 import com.invoice.api.repository.RepoInvoice;
 import com.invoice.api.repository.RepoProduct;
 
+import io.jsonwebtoken.Jwts;
+
 @SpringBootTest(properties = {
 		"spring.cloud.config.enabled=false",
 		"eureka.client.enabled=false",
-		"spring.jpa.hibernate.ddl-auto=create-drop"
+		"spring.jpa.hibernate.ddl-auto=create-drop",
+		"jwt.secret=" + ShoppingFlowIntegrationTests.SECRET
 })
 @AutoConfigureMockMvc
 class ShoppingFlowIntegrationTests {
 
+	static final String SECRET = "8J+YjvCfpJPwn5ic8J+YmvCfmI3wn6Ww8J+ZgvCfpKM=";
+	private static final SecretKey KEY = new SecretKeySpec(Base64.getDecoder().decode(SECRET), "HmacSHA256");
+
 	private static final String CUSTOMER_ID = "10";
+	private static final String ADMIN_TOKEN = bearer("admin", 1, "ADMIN");
+	private static final String CUSTOMER_TOKEN = bearer("customer", Integer.parseInt(CUSTOMER_ID), "CUSTOMER");
+
+	private static String bearer(String username, int userId, String... authorities) {
+		List<Map<String, String>> roles = Arrays.stream(authorities)
+				.map(authority -> Map.of("authority", authority))
+				.toList();
+		String token = Jwts.builder()
+				.setSubject(username)
+				.claim("id", userId)
+				.claim("roles", roles)
+				.signWith(KEY)
+				.compact();
+		return "Bearer " + token;
+	}
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -57,12 +85,13 @@ class ShoppingFlowIntegrationTests {
 	void productCrudUpdatesAndDeletes() throws Exception {
 		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 100);
 
-		mockMvc.perform(get("/product"))
+		mockMvc.perform(get("/product").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(1)))
 				.andExpect(jsonPath("$[0].name", is("Coca-cola 600 ml")));
 
 		mockMvc.perform(put("/product/7501055300075")
+				.header("Authorization", ADMIN_TOKEN)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{
@@ -76,21 +105,21 @@ class ShoppingFlowIntegrationTests {
 				.andExpect(jsonPath("$.name", is("Coca-cola 600 ml retornable")))
 				.andExpect(jsonPath("$.stock", is(80)));
 
-		mockMvc.perform(delete("/product/7501055300075"))
+		mockMvc.perform(delete("/product/7501055300075").header("Authorization", ADMIN_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message", is("El producto ha sido eliminado")));
 
-		mockMvc.perform(get("/product"))
+		mockMvc.perform(get("/product").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(0)));
 	}
 
 	@Test
-	void cartLifecycleUsesCustomerHeader() throws Exception {
+	void cartLifecycleUsesCustomerToken() throws Exception {
 		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 100);
 
 		mockMvc.perform(post("/cart-item")
-				.header("X-Customer-Id", CUSTOMER_ID)
+				.header("Authorization", CUSTOMER_TOKEN)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{
@@ -105,15 +134,15 @@ class ShoppingFlowIntegrationTests {
 
 		Integer cartItemId = repoCartItem.findAllByUserIdAndStatusTrue(Integer.valueOf(CUSTOMER_ID)).get(0).getCart_item_id();
 
-		mockMvc.perform(get("/cart-item").header("X-Customer-Id", CUSTOMER_ID))
+		mockMvc.perform(get("/cart-item").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(1)));
 
-		mockMvc.perform(delete("/cart-item/{id}", cartItemId).header("X-Customer-Id", CUSTOMER_ID))
+		mockMvc.perform(delete("/cart-item/{id}", cartItemId).header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message", is("El artículo ha sido eliminado del carrito")));
 
-		mockMvc.perform(get("/cart-item").header("X-Customer-Id", CUSTOMER_ID))
+		mockMvc.perform(get("/cart-item").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(0)));
 	}
@@ -124,7 +153,7 @@ class ShoppingFlowIntegrationTests {
 
 		addCartItem("7501055300075", 2);
 
-		mockMvc.perform(post("/invoice").header("X-Customer-Id", CUSTOMER_ID))
+		mockMvc.perform(post("/invoice").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.message", is("La factura ha sido registrada")));
 
@@ -147,13 +176,14 @@ class ShoppingFlowIntegrationTests {
 
 		addCartItem("7501055300075", 2);
 
-		mockMvc.perform(post("/invoice").header("X-Customer-Id", CUSTOMER_ID))
+		mockMvc.perform(post("/invoice").header("Authorization", CUSTOMER_TOKEN))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message", is("Stock insuficiente para el producto Coca-cola 600 ml")));
 	}
 
 	private void createProduct(String gtin, String name, String price, int stock) throws Exception {
 		mockMvc.perform(post("/product")
+				.header("Authorization", ADMIN_TOKEN)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{
@@ -168,7 +198,7 @@ class ShoppingFlowIntegrationTests {
 
 	private void addCartItem(String gtin, int quantity) throws Exception {
 		mockMvc.perform(post("/cart-item")
-				.header("X-Customer-Id", CUSTOMER_ID)
+				.header("Authorization", CUSTOMER_TOKEN)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{
