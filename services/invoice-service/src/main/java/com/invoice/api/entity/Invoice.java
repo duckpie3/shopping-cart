@@ -40,6 +40,22 @@ public class Invoice {
 	@Column(nullable = false)
 	private Boolean status = true;
 
+	// Puntos extra: dirección de envío, información de pago y cupón de descuento
+	@Column(length = 255)
+	private String shipping_address;
+
+	@Column(length = 20)
+	private String payment_method;
+
+	@Column(length = 4)
+	private String card_last4;
+
+	@Column(length = 20)
+	private String coupon_code;
+
+	@Column(precision = 12, scale = 2)
+	private BigDecimal discount;
+
 	@OneToMany(mappedBy = "invoice", fetch = FetchType.EAGER, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<InvoiceItem> items;
 	
@@ -114,6 +130,46 @@ public class Invoice {
 
 	public void setStatus(Boolean status) {
 		this.status = status;
+	}
+
+	public String getShipping_address() {
+		return shipping_address;
+	}
+
+	public void setShipping_address(String shipping_address) {
+		this.shipping_address = shipping_address;
+	}
+
+	public String getPayment_method() {
+		return payment_method;
+	}
+
+	public void setPayment_method(String payment_method) {
+		this.payment_method = payment_method;
+	}
+
+	public String getCard_last4() {
+		return card_last4;
+	}
+
+	public void setCard_last4(String card_last4) {
+		this.card_last4 = card_last4;
+	}
+
+	public String getCoupon_code() {
+		return coupon_code;
+	}
+
+	public void setCoupon_code(String coupon_code) {
+		this.coupon_code = coupon_code;
+	}
+
+	public BigDecimal getDiscount() {
+		return discount;
+	}
+
+	public void setDiscount(BigDecimal discount) {
+		this.discount = discount;
 	}
 
 	public List<InvoiceItem> getItems() {

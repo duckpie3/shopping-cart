@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.invoice.api.entity.Invoice;
 import com.invoice.api.repository.RepoCartItem;
+import com.invoice.api.repository.RepoCoupon;
 import com.invoice.api.repository.RepoInvoice;
 import com.invoice.api.repository.RepoProduct;
 
@@ -73,11 +74,15 @@ class ShoppingFlowIntegrationTests {
 	@Autowired
 	private RepoInvoice repoInvoice;
 
+	@Autowired
+	private RepoCoupon repoCoupon;
+
 	@BeforeEach
 	void cleanDatabase() {
 		repoInvoice.deleteAll();
 		repoCartItem.deleteAll();
 		repoProduct.deleteAll();
+		repoCoupon.deleteAll();
 	}
 
 	@Test
@@ -207,6 +212,63 @@ class ShoppingFlowIntegrationTests {
 	void requestsWithoutTokenAreRejected() throws Exception {
 		mockMvc.perform(get("/cart-item"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void checkoutPersistsShippingPaymentAndCoupon() throws Exception {
+		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 100);
+		addCartItem("7501055300075", 2);
+
+		// Solo el administrador puede crear cupones
+		mockMvc.perform(post("/coupon")
+				.header("Authorization", CUSTOMER_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"code\":\"PROMO10\",\"discount\":10}"))
+				.andExpect(status().isForbidden());
+
+		mockMvc.perform(post("/coupon")
+				.header("Authorization", ADMIN_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"code\":\"PROMO10\",\"discount\":10}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.code", is("PROMO10")));
+
+		mockMvc.perform(post("/invoice")
+				.header("Authorization", CUSTOMER_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{
+						  "shippingAddress": "Av. Universidad 3000, CDMX, 04510",
+						  "paymentMethod": "TARJETA",
+						  "cardLast4": "1234",
+						  "couponCode": "PROMO10"
+						}
+						"""))
+				.andExpect(status().isOk());
+
+		// Total 42.00 - 10% = 37.80; impuestos 6.05 (16%); subtotal 31.75
+		Invoice invoice = repoInvoice.findAll().get(0);
+		org.assertj.core.api.Assertions.assertThat(invoice.getDiscount()).isEqualByComparingTo(new BigDecimal("4.20"));
+		org.assertj.core.api.Assertions.assertThat(invoice.getTotal()).isEqualByComparingTo(new BigDecimal("37.80"));
+		org.assertj.core.api.Assertions.assertThat(invoice.getTaxes()).isEqualByComparingTo(new BigDecimal("6.05"));
+		org.assertj.core.api.Assertions.assertThat(invoice.getSubtotal()).isEqualByComparingTo(new BigDecimal("31.75"));
+		org.assertj.core.api.Assertions.assertThat(invoice.getCoupon_code()).isEqualTo("PROMO10");
+		org.assertj.core.api.Assertions.assertThat(invoice.getShipping_address()).isEqualTo("Av. Universidad 3000, CDMX, 04510");
+		org.assertj.core.api.Assertions.assertThat(invoice.getPayment_method()).isEqualTo("TARJETA");
+		org.assertj.core.api.Assertions.assertThat(invoice.getCard_last4()).isEqualTo("1234");
+	}
+
+	@Test
+	void checkoutRejectsUnknownCoupon() throws Exception {
+		createProduct("7501055300075", "Coca-cola 600 ml", "21.00", 100);
+		addCartItem("7501055300075", 2);
+
+		mockMvc.perform(post("/invoice")
+				.header("Authorization", CUSTOMER_TOKEN)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"couponCode\":\"NOEXISTE\"}"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.message", is("El cupón no existe")));
 	}
 
 	private void createProduct(String gtin, String name, String price, int stock) throws Exception {

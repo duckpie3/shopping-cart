@@ -83,6 +83,9 @@ curl http://localhost:8084/cart-item -H "Authorization: Bearer $CUST"
 # 5. Finalizar la compra: genera la factura, descuenta stock (100 → 98) y vacía el carrito
 curl -X POST http://localhost:8084/invoice -H "Authorization: Bearer $CUST"
 
+#    Opcionalmente se puede indicar dirección de envío, información de pago
+#    y un cupón de descuento (ver "Puntos extra" más abajo)
+
 # 6. Consultar facturas
 curl http://localhost:8084/invoice -H "Authorization: Bearer $CUST"
 
@@ -117,6 +120,40 @@ curl -i -X POST http://localhost:8084/cart-item -H "Authorization: Bearer $CUST"
   el token (sin el prefijo `Bearer`).
 - Los datos pueden consultarse con cualquier cliente MySQL
   (base `db_invoice`, usuario `invoice`).
+
+### Dirección de envío, pago y cupones
+
+Al finalizar la compra se puede enviar un cuerpo opcional con la dirección de
+envío, la información de pago y un cupón de descuento; todo queda persistido
+en la factura.
+
+```bash
+# Crear un cupón de descuento (solo ADMIN): 10% de descuento
+curl -X POST http://localhost:8084/coupon \
+  -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"PROMO10","discount":10}'
+
+# Consultar cupones (solo ADMIN)
+curl http://localhost:8084/coupon -H "Authorization: Bearer $ADMIN"
+
+# Finalizar la compra con dirección, pago y cupón
+curl -X POST http://localhost:8084/invoice \
+  -H "Authorization: Bearer $CUST" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "shippingAddress": "Av. Universidad 3000, CDMX, 04510",
+    "paymentMethod": "TARJETA",
+    "cardLast4": "1234",
+    "couponCode": "PROMO10"
+  }'
+```
+
+El descuento se aplica al total y los impuestos se calculan sobre el total
+final. Con el ejemplo anterior (2 × $21 con cupón del 10%): descuento 4.20,
+total 37.80, impuestos 6.05, subtotal 31.75. El detalle de la factura
+(`GET /invoice/{id}`) muestra la dirección, el método de pago, los últimos
+dígitos de la tarjeta, el cupón y el descuento aplicado.
 
 ### Pruebas automatizadas
 

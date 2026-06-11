@@ -27,6 +27,7 @@ public class SecurityConfig {
 				.requestMatchers("/error", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/actuator/info", "/actuator/health").permitAll()
 				.requestMatchers(HttpMethod.GET, "/product/**").authenticated()
 				.requestMatchers("/product/**").hasAuthority("ADMIN")
+				.requestMatchers("/coupon/**").hasAuthority("ADMIN")
 				.requestMatchers("/cart-item/**").authenticated()
 				.requestMatchers("/invoice/**").authenticated()
 				.anyRequest().authenticated()
