@@ -1,3 +1,4 @@
+# Uso para probar projecto en caso de preferir usar docker
 services:
   mysql:
     image: mysql:8
